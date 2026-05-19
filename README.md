@@ -1,10 +1,10 @@
-# Claude Desktop 简体中文语言包（人味版）
+# Claude Desktop 简体中文语言包（20260519修正版）
 
 为 Claude Desktop (Windows / macOS) 的界面语言增加简体中文。
 
-本仓库在 [RICK 原版](https://linux.do/t/topic/2040184) 基础上由 [LifeActor](https://github.com/LifeActor) 迭代维护，新增了一套基于 AI 的翻译工具链（`split_template.py` / `merge_template.py` / `translate_ai.py`），可对 Claude Desktop 的全量界面文案进行增量 AI 翻译、质量检查与修复。
+本仓库在 [RICK 原版](https://linux.do/t/topic/2040184) 的派生版本 [Pheo Hu](https://github.com/pheohu-42/Claude_zh-CN_LanguagePack) 基础上由 [LifeActor](https://github.com/LifeActor) 迭代维护，新增了一套基于 AI 的翻译工具链（`split_template.py` / `merge_template.py` / `translate_ai.py`），可对 Claude Desktop 的全量界面文案进行增量 AI 翻译、质量检查与修复。
 
-使用 GLM5.1 翻译 + 人工粗校，拒绝机翻味。
+项目内语言包是用 DeepSeek V4 翻译经人工粗校,可放心食用,原语言包基于 1.7196.3 版本。
 
 <img width="75%" alt="image" src="https://github.com/user-attachments/assets/16c330db-6df9-43ca-a333-61172057ad6e" />
 
@@ -339,6 +339,7 @@ python translate_ai.py check all --fix
 ## 感谢
 
 - 简体中文包原型：https://linux.do/t/topic/2040184 by [RICK](https://linux.do/u/lbls888)
+- 基础项目：[Pheo Hu](https://github.com/pheohu-42/Claude_zh-CN_LanguagePack)
 - AI 翻译工具链：[LifeActor](https://github.com/LifeActor)
 - 使用教程：[开启Claude 3P模式与自定义推理端点](https://linux.do/t/topic/2032192) 与 [使用自定义模型映射](https://linux.do/t/topic/2034445)
 - [Linux Do 社区](https://linux.do/)：[![](https://ldo.betax.dev/badge/community)](https://linux.do/)。学 AI，上 L 站。
