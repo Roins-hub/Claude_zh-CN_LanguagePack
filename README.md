@@ -98,11 +98,15 @@ python translate_ai.py statsig
 python translate_ai.py ion-dist all    # 全部分片，--workers N 控制并发数
 
 # 4. 质量检查（可选）
-python translate_ai.py check all       # 检查回退/缺失/纯英文条目
-python translate_ai.py check all --fix # 删除问题条目后重新翻译
+python translate_ai.py check all              # 检查所有目标，日志写入 check-reports/
+python translate_ai.py check all --fix        # 删除问题条目，下次翻译时重新生成
+python translate_ai.py check all --no-log     # 不写日志
+python translate_ai.py check all --log-dir ./reports  # 自定义日志目录
 
 # 5. 重新运行安装脚本使更改生效
 ```
+
+check 检测项：回退（译文==原文）、缺失、纯英文、译文膨胀、ICU 结构不一致、占位符丢失/多余、HTML 标签丢失/多余、转义序列不匹配。每次检查结果自动写入 `check-reports/` 目录（JSON 格式，含完整原文/译文对照）。
 
 ## 常见问题
 

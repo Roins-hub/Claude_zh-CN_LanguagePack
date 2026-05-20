@@ -12,3 +12,6 @@ extract_*.py
 inspect_*.ps1
 list_*.ps1
 *_report.txt
+
+# check 日志（本地产物，不入库）
+check-reports/
