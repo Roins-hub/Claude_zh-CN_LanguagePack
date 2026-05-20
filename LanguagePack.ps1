@@ -516,7 +516,17 @@ function Resolve-ClaudeResources {
     }
 }
 
+function Print-Banner {
+    Write-Host ""
+    Write-Host "  Claude Desktop 简体中文语言包" -ForegroundColor Cyan
+    Write-Host "  https://github.com/LifeActor/Claude_zh-CN_LanguagePack" -ForegroundColor DarkGray
+    Write-Host "  作者: LifeActor  |  基于 Pheo Hu / RICK 的工作  |  CC BY-NC-SA 4.0" -ForegroundColor DarkGray
+    Write-Host "  本项目与 Anthropic 无关，仅供个人学习使用。" -ForegroundColor DarkGray
+    Write-Host ""
+}
+
 function Install-LanguagePack {
+    Print-Banner
     Write-Host ""
     Write-Host "=== Claude Desktop 中文语言包安装 ==="
     Write-Host ""
@@ -620,6 +630,7 @@ function Install-LanguagePack {
 }
 
 function Uninstall-LanguagePack {
+    Print-Banner
     Write-Host ""
     Write-Host "=== Claude Desktop 中文语言包卸载 ==="
     Write-Host ""
@@ -663,6 +674,7 @@ function Uninstall-LanguagePack {
 }
 
 function Extract-EnglishFiles {
+    Print-Banner
     Write-Host ""
     Write-Host "=== Claude Desktop 英文文本提取 ==="
     Write-Host ""

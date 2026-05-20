@@ -507,10 +507,20 @@ def verify_translation_registration(app_path: Path) -> None:
     print("  Verified language whitelist contains zh-CN")
 
 
+def print_banner() -> None:
+    print()
+    print("  Claude Desktop 简体中文语言包")
+    print("  https://github.com/LifeActor/Claude_zh-CN_LanguagePack")
+    print("  作者: LifeActor  |  基于 Pheo Hu / RICK 的工作  |  CC BY-NC-SA 4.0")
+    print("  本项目与 Anthropic 无关，仅供个人学习使用。")
+    print()
+
+
 def install_language_pack(*, app_path: Path, user_home: Path, dry_run: bool, launch: bool) -> None:
     ensure_translation_assets()
     require_directory(app_path, label="Claude.app")
 
+    print_banner()
     print_step("=== macOS 安装 Claude 中文语言包 ===")
     print(f"Target app: {app_path}")
     print(f"User home: {user_home}")
@@ -560,6 +570,7 @@ def install_language_pack(*, app_path: Path, user_home: Path, dry_run: bool, lau
 
 
 def uninstall_language_pack(*, app_path: Path, user_home: Path, dry_run: bool, launch: bool) -> None:
+    print_banner()
     print_step("=== macOS 卸载 Claude 中文语言包 ===")
     print(f"Target app: {app_path}")
     print(f"User home: {user_home}")
@@ -605,6 +616,7 @@ def extract_resource(source: Path, extracted_target: Path, template_target: Path
 def extract_english_resources(*, app_path: Path, dry_run: bool) -> None:
     require_directory(app_path, label="Claude.app")
 
+    print_banner()
     print_step("=== macOS 提取 Claude 英文资源 ===")
     print(f"Target app: {app_path}")
     if dry_run:
