@@ -1,4 +1,5 @@
 # Claude Desktop 简体中文语言包
+## 应该是全网深度校验独一份 - 2026-05-20 Claude 1.8089.1 (b98a06) 2026-05-19T18:28:48.000Z
 
 为 Claude Desktop（Windows / macOS）界面添加简体中文支持。
 
