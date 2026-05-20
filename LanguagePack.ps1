@@ -149,15 +149,41 @@ function Grant-WriteAccess {
 
 function Backup-File {
     param(
-        [Parameter(Mandatory = $true)][string]$Path
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $false)][string]$RelativeTo = ""
     )
 
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
         return
     }
 
-    [System.IO.Directory]::CreateDirectory($backupDir) | Out-Null
-    Copy-Item -LiteralPath $Path -Destination (Join-Path $backupDir (Split-Path $Path -Leaf)) -Force
+    # 保留相对路径结构，避免多个同名文件互相覆盖
+    if ($RelativeTo -and $Path.StartsWith($RelativeTo, [System.StringComparison]::OrdinalIgnoreCase)) {
+        $relative = $Path.Substring($RelativeTo.Length).TrimStart("\")
+    }
+    else {
+        $relative = Split-Path $Path -Leaf
+    }
+
+    $dest = Join-Path $backupDir $relative
+    [System.IO.Directory]::CreateDirectory((Split-Path -Parent $dest)) | Out-Null
+    Copy-Item -LiteralPath $Path -Destination $dest -Force
+}
+
+function Get-BackupPath {
+    param(
+        [Parameter(Mandatory = $true)][string]$OriginalPath,
+        [Parameter(Mandatory = $false)][string]$RelativeTo = ""
+    )
+
+    if ($RelativeTo -and $OriginalPath.StartsWith($RelativeTo, [System.StringComparison]::OrdinalIgnoreCase)) {
+        $relative = $OriginalPath.Substring($RelativeTo.Length).TrimStart("\")
+    }
+    else {
+        $relative = Split-Path $OriginalPath -Leaf
+    }
+
+    return Join-Path $backupDir $relative
 }
 
 function Patch-JsLanguage {
@@ -177,9 +203,8 @@ function Patch-JsLanguage {
         return $false
     }
 
-    $exactOld = 'Mz=["en-US","de-DE","fr-FR","ko-KR","ja-JP","es-419","es-ES","it-IT","hi-IN","pt-BR","id-ID"]'
-    $exactNew = 'Mz=["en-US","de-DE","fr-FR","ko-KR","ja-JP","es-419","es-ES","it-IT","hi-IN","pt-BR","id-ID","zh-CN"]'
-    $regex = [regex]'((?:\w+)=\["en-US"(?:,"[^"]+")+)\]'
+    # 只用正则匹配，不依赖硬编码变量名（每次 Claude 打包变量名都会变）
+    $regexAdd = [regex]'((?:[\w$]+)=\["en-US"(?:,"[^"]+")+)\]'
 
     $patched = $false
 
@@ -193,20 +218,12 @@ function Patch-JsLanguage {
             continue
         }
 
-        Backup-File -Path $jsFile.FullName
+        Backup-File -Path $jsFile.FullName -RelativeTo $ResourcesPath
 
-        if ($content.Contains($exactOld)) {
-            $newContent = $content.Replace($exactOld, $exactNew)
-            Write-Utf8File -Path $jsFile.FullName -Content $newContent
-            Write-Host "  JS补丁已应用: $($jsFile.Name)"
-            $patched = $true
-            continue
-        }
-
-        $newContent = $regex.Replace($content, '$1,"zh-CN"]', 1)
+        $newContent = $regexAdd.Replace($content, '$1,"zh-CN"]', 1)
         if ($newContent -ne $content) {
             Write-Utf8File -Path $jsFile.FullName -Content $newContent
-            Write-Host "  JS补丁已应用(正则): $($jsFile.Name)"
+            Write-Host "  JS补丁已应用: $($jsFile.Name)"
             $patched = $true
             continue
         }
@@ -229,12 +246,11 @@ function Unpatch-JsLanguage {
     }
 
     $jsFiles = Get-ChildItem -LiteralPath $assetsDir -Filter "index-*.js" -File -ErrorAction SilentlyContinue
-    $exactOld = 'Mz=["en-US","de-DE","fr-FR","ko-KR","ja-JP","es-419","es-ES","it-IT","hi-IN","pt-BR","id-ID","zh-CN"]'
-    $exactNew = 'Mz=["en-US","de-DE","fr-FR","ko-KR","ja-JP","es-419","es-ES","it-IT","hi-IN","pt-BR","id-ID"]'
-    $regex = [regex]'((?:\w+)=\[(?:"[^"]+",)+)"zh-CN"\]'
+    # 只用正则移除，不依赖硬编码变量名
+    $regexRemove = [regex]'((?:[\w$]+)=\[(?:"[^"]+",)+)"zh-CN"\]'
 
     foreach ($jsFile in $jsFiles) {
-        $backupPath = Join-Path $backupDir $jsFile.Name
+        $backupPath = Get-BackupPath -OriginalPath $jsFile.FullName -RelativeTo $ResourcesPath
 
         if (Test-Path -LiteralPath $backupPath -PathType Leaf) {
             Grant-WriteAccess -Path $jsFile.FullName
@@ -251,17 +267,10 @@ function Unpatch-JsLanguage {
             continue
         }
 
-        if ($content.Contains($exactOld)) {
-            $newContent = $content.Replace($exactOld, $exactNew)
-            Write-Utf8File -Path $jsFile.FullName -Content $newContent
-            Write-Host "  语言注册已恢复: $($jsFile.Name)"
-            continue
-        }
-
-        $newContent = $regex.Replace($content, '$1]', 1)
+        $newContent = $regexRemove.Replace($content, '$1]', 1)
         if ($newContent -ne $content) {
             Write-Utf8File -Path $jsFile.FullName -Content $newContent
-            Write-Host "  语言注册已恢复(正则): $($jsFile.Name)"
+            Write-Host "  语言注册已恢复: $($jsFile.Name)"
             continue
         }
 
@@ -293,17 +302,17 @@ function Update-Config {
 
         try {
             $raw = Get-Content -LiteralPath $configPath -Raw -Encoding UTF8
-            $config = $raw | ConvertFrom-Json
 
-            if ($config.PSObject.Properties.Name -contains "locale") {
-                $config.locale = $Locale
+            # 用正则原地替换 locale 值，保留原始格式和其他字段不变
+            if ($raw -match '"locale"\s*:') {
+                $newRaw = $raw -replace '("locale"\s*:\s*)"[^"]*"', "`$1`"$Locale`""
             }
             else {
-                $config | Add-Member -NotePropertyName "locale" -NotePropertyValue $Locale
+                # locale 字段不存在，在最后一个 } 前插入
+                $newRaw = $raw -replace '(\s*)\}(\s*)$', ",`r`n  `"locale`": `"$Locale`"`$1}`$2"
             }
 
-            $json = $config | ConvertTo-Json -Depth 100
-            Write-Utf8File -Path $configPath -Content $json
+            Write-Utf8File -Path $configPath -Content $newRaw
             Write-Host "  $(Split-Path $configPath -Leaf)"
         }
         catch {
@@ -490,6 +499,43 @@ function Get-RequiredTranslationFiles {
     return $required
 }
 
+function Merge-LocaleJson {
+    <#
+    .SYNOPSIS
+        将 en-US.json 与 zh-CN.json 合并，缺失的 key 用英文兜底。
+        对齐 macOS LanguagePack.mac.py 的 merge_locale_dicts 逻辑。
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$EnglishPath,
+        [Parameter(Mandatory = $true)][string]$TranslatedPath
+    )
+
+    $english    = Get-Content -LiteralPath $EnglishPath    -Raw -Encoding UTF8 | ConvertFrom-Json
+    $translated = Get-Content -LiteralPath $TranslatedPath -Raw -Encoding UTF8 | ConvertFrom-Json
+
+    $merged = [ordered]@{}
+    $translatedCount = 0
+    $fallbackCount   = 0
+
+    foreach ($prop in $english.PSObject.Properties) {
+        $key = $prop.Name
+        $enVal = $prop.Value
+        if ($translated.PSObject.Properties[$key]) {
+            $zhVal = $translated.PSObject.Properties[$key].Value
+            $merged[$key] = $zhVal
+            if ($zhVal -ne $enVal) { $translatedCount++ }
+        }
+        else {
+            $merged[$key] = $enVal
+            $fallbackCount++
+        }
+    }
+
+    Write-Host ("    已翻译 {0} 条，英文兜底 {1} 条" -f $translatedCount, $fallbackCount)
+    return $merged
+}
+
+
 function Resolve-ClaudeResources {
     $claudePath = Find-ClaudePath
     if (-not $claudePath) {
@@ -554,16 +600,56 @@ function Install-LanguagePack {
     Write-Host ""
     Write-Host "[3/5] 安装翻译文件..."
     $targets = @(
-        [pscustomobject]@{ Source = $required[0].Path; Target = (Join-Path $resolved.ResourcesPath "ion-dist\i18n\zh-CN.json") },
-        [pscustomobject]@{ Source = $required[1].Path; Target = (Join-Path $resolved.ResourcesPath "zh-CN.json") },
-        [pscustomobject]@{ Source = $required[2].Path; Target = (Join-Path $resolved.ResourcesPath "ion-dist\i18n\statsig\zh-CN.json") }
+        [pscustomobject]@{
+            Name       = "ion-dist"
+            Source     = $required[0].Path
+            EnglishSrc = (Join-Path $resolved.ResourcesPath "ion-dist\i18n\en-US.json")
+            Target     = (Join-Path $resolved.ResourcesPath "ion-dist\i18n\zh-CN.json")
+        },
+        [pscustomobject]@{
+            Name       = "desktop-shell"
+            Source     = $required[1].Path
+            EnglishSrc = (Join-Path $resolved.ResourcesPath "en-US.json")
+            Target     = (Join-Path $resolved.ResourcesPath "zh-CN.json")
+        },
+        [pscustomobject]@{
+            Name       = "statsig"
+            Source     = $required[2].Path
+            EnglishSrc = (Join-Path $resolved.ResourcesPath "ion-dist\i18n\statsig\en-US.json")
+            Target     = (Join-Path $resolved.ResourcesPath "ion-dist\i18n\statsig\zh-CN.json")
+        }
     )
 
     foreach ($target in $targets) {
         [System.IO.Directory]::CreateDirectory((Split-Path -Parent $target.Target)) | Out-Null
-        Copy-Item -LiteralPath $target.Source -Destination $target.Target -Force
         $relativeTarget = $target.Target.Substring($resolved.ResourcesPath.Length).TrimStart("\")
-        Write-Host "  $relativeTarget"
+
+        # 若能找到对应的 en-US.json，则合并兜底；否则直接复制
+        if (Test-Path -LiteralPath $target.EnglishSrc -PathType Leaf) {
+            Write-Host "  $($target.Name): 合并 en-US 兜底..."
+            $merged = Merge-LocaleJson -EnglishPath $target.EnglishSrc -TranslatedPath $target.Source
+            $json = $merged | ConvertTo-Json -Depth 100 -Compress:$false
+            Write-Utf8File -Path $target.Target -Content $json
+        }
+        else {
+            Copy-Item -LiteralPath $target.Source -Destination $target.Target -Force
+            Write-Host "  $($target.Name): 直接复制（未找到 en-US.json）"
+        }
+
+        Write-Host "  → $relativeTarget"
+    }
+
+    # 安装 overrides 文件（前端对非 en-US 语言会额外 fetch 此文件）
+    $overridesSource = Join-Path $packDir "ion-dist\zh-CN.overrides.json"
+    $overridesTarget = Join-Path $resolved.ResourcesPath "ion-dist\i18n\zh-CN.overrides.json"
+    if (Test-Path -LiteralPath $overridesSource -PathType Leaf) {
+        Copy-Item -LiteralPath $overridesSource -Destination $overridesTarget -Force
+        Write-Host "  → ion-dist\i18n\zh-CN.overrides.json"
+    }
+    else {
+        # overrides 文件不存在时写入空对象，避免前端 fetch 404 后静默失败
+        Write-Utf8File -Path $overridesTarget -Content "{}`n"
+        Write-Host "  → ion-dist\i18n\zh-CN.overrides.json (空占位)"
     }
 
     Write-Host ""
@@ -598,6 +684,7 @@ function Uninstall-LanguagePack {
     Write-Host "[2/4] 删除翻译文件..."
     foreach ($path in @(
             (Join-Path $resolved.ResourcesPath "ion-dist\i18n\zh-CN.json"),
+            (Join-Path $resolved.ResourcesPath "ion-dist\i18n\zh-CN.overrides.json"),
             (Join-Path $resolved.ResourcesPath "zh-CN.json"),
             (Join-Path $resolved.ResourcesPath "ion-dist\i18n\statsig\zh-CN.json")
         )) {
@@ -659,6 +746,18 @@ function Extract-EnglishFiles {
         Copy-Item -LiteralPath $target.Source -Destination $enOut -Force
         Copy-Item -LiteralPath $target.Source -Destination $templateOut -Force
         Write-Host "  $($target.Name): OK"
+    }
+
+    # overrides 文件是各语言自有的覆盖条目，不存在通用英文原文
+    # zh-CN.overrides.json 初始为空，后续按需手动添加需要覆盖的条目
+    $overridesTplOut = Join-Path $templateDir "ion-dist\zh-CN.overrides.json"
+    if (-not (Test-Path -LiteralPath $overridesTplOut -PathType Leaf)) {
+        [System.IO.Directory]::CreateDirectory((Split-Path -Parent $overridesTplOut)) | Out-Null
+        Write-Utf8File -Path $overridesTplOut -Content "{}`n"
+        Write-Host "  ion-dist/overrides: 已创建空占位模板"
+    }
+    else {
+        Write-Host "  ion-dist/overrides: 已存在，跳过"
     }
 
     Write-Host ""

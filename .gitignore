@@ -1,3 +1,14 @@
 __pycache__/
 *.py[cod]
 .env
+*副本*
+* - Copy*
+
+# Claude JS bundle（体积大，不入库）
+index-*.js
+
+# 临时分析/调试脚本
+extract_*.py
+inspect_*.ps1
+list_*.ps1
+*_report.txt

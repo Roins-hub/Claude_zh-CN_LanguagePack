@@ -27,6 +27,7 @@ EXTRACTED_ROOT = ROOT / "extracted-en-US"
 TEMPLATE_ROOT = ROOT / "translation-template"
 
 FRONTEND_TRANSLATION = TRANSLATED_ROOT / "ion-dist" / "zh-CN.json"
+FRONTEND_OVERRIDES_TRANSLATION = TRANSLATED_ROOT / "ion-dist" / "zh-CN.overrides.json"
 DESKTOP_TRANSLATION = TRANSLATED_ROOT / "desktop-shell" / "zh-CN.json"
 STATSIG_TRANSLATION = TRANSLATED_ROOT / "statsig" / "zh-CN.json"
 MACOS_TRANSLATION = TRANSLATED_ROOT / "macos" / "Localizable.strings"
@@ -211,6 +212,10 @@ def ensure_translation_assets() -> None:
         MACOS_TRANSLATION,
     ):
         require_file(path)
+    # overrides 文件可选，不存在时自动创建空占位
+    if not FRONTEND_OVERRIDES_TRANSLATION.exists():
+        FRONTEND_OVERRIDES_TRANSLATION.parent.mkdir(parents=True, exist_ok=True)
+        FRONTEND_OVERRIDES_TRANSLATION.write_text("{}\n", encoding="utf-8")
 
 
 def copy_app_to_workspace(source_app: Path) -> Path:
@@ -293,6 +298,14 @@ def install_frontend_locale(app_path: Path) -> None:
         translated_path=FRONTEND_TRANSLATION,
         target_path=app_path / FRONTEND_I18N_REL / f"{LANG_CODE}.json",
     )
+
+
+def install_frontend_overrides(app_path: Path) -> None:
+    """安装 overrides 文件（前端对非 en-US 语言会额外 fetch 此文件）。"""
+    target_path = app_path / FRONTEND_I18N_REL / f"{LANG_CODE}.overrides.json"
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    copy_file(FRONTEND_OVERRIDES_TRANSLATION, target_path)
+    print(f"  ion-dist overrides: wrote {target_path}")
 
 
 def install_desktop_locale(app_path: Path) -> None:
@@ -584,6 +597,7 @@ def install_language_pack(*, app_path: Path, user_home: Path, dry_run: bool, lau
     patch_language_whitelist(patched_app)
     patch_hardcoded_frontend_strings(patched_app)
     install_frontend_locale(patched_app)
+    install_frontend_overrides(patched_app)
     install_desktop_locale(patched_app)
     install_statsig_locale(patched_app)
     install_localizable_strings(patched_app)
@@ -666,7 +680,7 @@ def extract_english_resources(*, app_path: Path, dry_run: bool) -> None:
     statsig_source = app_path / STATSIG_REL / f"{LANG_FALLBACK}.json"
     localizable_source = find_localizable_strings_source(app_path)
 
-    print_step("[1/2] 提取 4 类原文资源")
+    print_step("[1/2] 提取 5 类原文资源")
     extract_resource(
         frontend_source,
         EXTRACTED_ROOT / "ion-dist" / f"{LANG_FALLBACK}.json",
@@ -696,6 +710,19 @@ def extract_english_resources(*, app_path: Path, dry_run: bool) -> None:
         TEMPLATE_ROOT / "macos" / "Localizable.strings",
         dry_run=dry_run,
     )
+
+    # overrides 文件是各语言自有的覆盖条目，不存在通用英文原文
+    # zh-CN.overrides.json 初始为空，后续按需手动添加需要覆盖的条目
+    overrides_template = TEMPLATE_ROOT / "ion-dist" / f"{LANG_CODE}.overrides.json"
+    if not overrides_template.exists():
+        if dry_run:
+            print(f"  [dry-run] Would create empty overrides template → {overrides_template}")
+        else:
+            overrides_template.parent.mkdir(parents=True, exist_ok=True)
+            overrides_template.write_text("{}\n", encoding="utf-8")
+            print(f"  Overrides template: created empty placeholder → {overrides_template}")
+    else:
+        print(f"  Overrides template: already exists, skipped → {overrides_template}")
 
     print_step("[2/2] 完成")
     if not dry_run:

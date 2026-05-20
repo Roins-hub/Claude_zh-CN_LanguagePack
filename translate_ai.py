@@ -5,6 +5,7 @@ AI 翻译引擎
   - translation-template/desktop-shell/zh-CN.json
   - translation-template/statsig/zh-CN.json
   - translation-template/ion-dist/parts/zh-CN.part-NNN.json
+  - translation-template/ion-dist/zh-CN.overrides.json
 
 只翻译 template 中有、但 translated-zh-CN 对应文件中没有的条目。
 翻译结果直接写回 translated-zh-CN/ 对应文件（增量合并，不覆盖已有翻译）。
@@ -15,14 +16,16 @@ AI 翻译引擎
   python translate_ai.py ion-dist 1          # 翻译 part-001
   python translate_ai.py ion-dist 1 5        # 翻译 part-001 到 part-005
   python translate_ai.py ion-dist all        # 翻译全部分片
+  python translate_ai.py overrides           # 翻译 ion-dist overrides
 
   python translate_ai.py check desktop-shell # 检查译文质量
   python translate_ai.py check statsig
   python translate_ai.py check ion-dist
+  python translate_ai.py check overrides
   python translate_ai.py check all           # 检查全部
 
   --force      强制重新翻译（覆盖已有译文）
-  --workers N  并发线程数（默认 5）
+  --workers N  并发线程数（默认 10）
   --fix        （仅 check）从译文中删除回退/纯英文条目，便于下次重译
 """
 
@@ -42,6 +45,8 @@ ROOT = Path(__file__).parent
 TEMPLATE_DIR = ROOT / "translation-template"
 TRANSLATED_DIR = ROOT / "translated-zh-CN"
 PARTS_DIR = TEMPLATE_DIR / "ion-dist" / "parts"
+OVERRIDES_TEMPLATE = TEMPLATE_DIR / "ion-dist" / "zh-CN.overrides.json"
+OVERRIDES_OUTPUT   = TRANSLATED_DIR / "ion-dist" / "zh-CN.overrides.json"
 
 # ── 配置 ──────────────────────────────────────────────────────────────────────
 load_dotenv(ROOT / ".env", override=True)
@@ -247,7 +252,29 @@ def run_parts(
         )
 
 
-def _has_chinese(s: str) -> bool:
+def run_overrides(client: OpenAI, model: str, force: bool, workers: int) -> None:
+    """翻译 ion-dist overrides 文件（条目数通常较少，单批完成）。"""
+    if not OVERRIDES_TEMPLATE.exists():
+        print("[overrides] 模板文件不存在，请先运行提取脚本生成 translation-template/ion-dist/zh-CN.overrides.json")
+        return
+
+    template = load_json(OVERRIDES_TEMPLATE)
+    if not template:
+        print("[overrides] 模板为空，跳过。")
+        return
+
+    existing = load_json(OVERRIDES_OUTPUT)
+    pending = dict(template) if force else {k: v for k, v in template.items() if k not in existing}
+
+    if not pending:
+        print("[overrides] 无新增条目，跳过。")
+        return
+
+    file_lock = threading.Lock()
+    translate_concurrent(client, model, pending, OVERRIDES_OUTPUT, file_lock, "overrides", workers)
+
+
+
     return any("一" <= ch <= "鿿" for ch in s)
 
 
@@ -264,6 +291,9 @@ def check_translation(name: str, fix: bool = False) -> tuple[int, int, int]:
         for p in part_files:
             template.update(load_json(p))
         output_path = TRANSLATED_DIR / "ion-dist" / "zh-CN.json"
+    elif name == "overrides":
+        template = load_json(OVERRIDES_TEMPLATE)
+        output_path = OVERRIDES_OUTPUT
     else:
         template = load_json(TEMPLATE_DIR / name / "zh-CN.json")
         output_path = TRANSLATED_DIR / name / "zh-CN.json"
@@ -347,10 +377,10 @@ def main() -> None:
             print("用法: python translate_ai.py check <desktop-shell|statsig|ion-dist|all> [--fix]")
             sys.exit(1)
         sub = args[1].lower()
-        targets = ["desktop-shell", "statsig", "ion-dist"] if sub == "all" else [sub]
+        targets = ["desktop-shell", "statsig", "ion-dist", "overrides"] if sub == "all" else [sub]
         totals = [0, 0, 0]
         for t in targets:
-            if t not in ("desktop-shell", "statsig", "ion-dist"):
+            if t not in ("desktop-shell", "statsig", "ion-dist", "overrides"):
                 print(f"未知检查目标: {t}")
                 sys.exit(1)
             a, b, c = check_translation(t, fix=fix)
@@ -363,6 +393,9 @@ def main() -> None:
 
     if target in ("desktop-shell", "statsig"):
         run_flat(client, model, target, force=force, workers=workers)
+
+    elif target == "overrides":
+        run_overrides(client, model, force=force, workers=workers)
 
     elif target == "ion-dist":
         if len(args) < 2:
