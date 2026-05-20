@@ -68,13 +68,6 @@ HARDCODED_FRONTEND_REPLACEMENTS = {
 }
 
 
-@dataclass
-class MergeStats:
-    translated: int
-    fallback: int
-    extra_ignored: int
-
-
 def run(cmd: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
     result = subprocess.run(
         cmd,
@@ -129,52 +122,6 @@ def save_json(path: Path, data: Any) -> None:
 def copy_file(source: Path, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, destination)
-
-
-def merge_locale_dicts(english_path: Path, translated_path: Path) -> tuple[dict[str, Any], MergeStats]:
-    require_file(english_path)
-    require_file(translated_path)
-
-    english = load_json(english_path)
-    translated = load_json(translated_path)
-
-    if not isinstance(english, dict) or not isinstance(translated, dict):
-        raise SystemExit(f"Unsupported locale JSON structure: {english_path}")
-
-    merged: dict[str, Any] = {}
-    translated_count = 0
-    fallback_count = 0
-
-    for key, english_value in english.items():
-        if key in translated:
-            merged[key] = translated[key]
-            if translated[key] != english_value:
-                translated_count += 1
-        else:
-            merged[key] = english_value
-            fallback_count += 1
-
-    extra_ignored = len(set(translated) - set(english))
-    return merged, MergeStats(
-        translated=translated_count,
-        fallback=fallback_count,
-        extra_ignored=extra_ignored,
-    )
-
-
-def install_merged_locale(
-    *,
-    label: str,
-    english_path: Path,
-    translated_path: Path,
-    target_path: Path,
-) -> None:
-    merged, stats = merge_locale_dicts(english_path, translated_path)
-    save_json(target_path, merged)
-    print(
-        f"  {label}: wrote {target_path} "
-        f"({stats.translated} translated, {stats.fallback} fallback, {stats.extra_ignored} old keys ignored)"
-    )
 
 
 def load_entitlements(path: Path) -> dict[str, Any]:
@@ -292,12 +239,10 @@ def patch_hardcoded_frontend_strings(app_path: Path) -> None:
 
 
 def install_frontend_locale(app_path: Path) -> None:
-    install_merged_locale(
-        label="ion-dist",
-        english_path=app_path / FRONTEND_I18N_REL / f"{LANG_FALLBACK}.json",
-        translated_path=FRONTEND_TRANSLATION,
-        target_path=app_path / FRONTEND_I18N_REL / f"{LANG_CODE}.json",
-    )
+    target_path = app_path / FRONTEND_I18N_REL / f"{LANG_CODE}.json"
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    copy_file(FRONTEND_TRANSLATION, target_path)
+    print(f"  ion-dist: wrote {target_path}")
 
 
 def install_frontend_overrides(app_path: Path) -> None:
@@ -309,12 +254,10 @@ def install_frontend_overrides(app_path: Path) -> None:
 
 
 def install_desktop_locale(app_path: Path) -> None:
-    install_merged_locale(
-        label="desktop-shell",
-        english_path=app_path / RESOURCES_REL / f"{LANG_FALLBACK}.json",
-        translated_path=DESKTOP_TRANSLATION,
-        target_path=app_path / RESOURCES_REL / f"{LANG_CODE}.json",
-    )
+    target_path = app_path / RESOURCES_REL / f"{LANG_CODE}.json"
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    copy_file(DESKTOP_TRANSLATION, target_path)
+    print(f"  desktop-shell: wrote {target_path}")
 
 
 def install_statsig_locale(app_path: Path) -> None:
@@ -323,17 +266,9 @@ def install_statsig_locale(app_path: Path) -> None:
         print("  statsig: directory not found, skipped")
         return
 
-    english_path = statsig_dir / f"{LANG_FALLBACK}.json"
-    if not english_path.is_file():
-        print("  statsig: en-US.json not found, skipped")
-        return
-
-    install_merged_locale(
-        label="statsig",
-        english_path=english_path,
-        translated_path=STATSIG_TRANSLATION,
-        target_path=statsig_dir / f"{LANG_CODE}.json",
-    )
+    target_path = statsig_dir / f"{LANG_CODE}.json"
+    copy_file(STATSIG_TRANSLATION, target_path)
+    print(f"  statsig: wrote {target_path}")
 
 
 def install_localizable_strings(app_path: Path) -> None:

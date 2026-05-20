@@ -499,43 +499,6 @@ function Get-RequiredTranslationFiles {
     return $required
 }
 
-function Merge-LocaleJson {
-    <#
-    .SYNOPSIS
-        将 en-US.json 与 zh-CN.json 合并，缺失的 key 用英文兜底。
-        对齐 macOS LanguagePack.mac.py 的 merge_locale_dicts 逻辑。
-    #>
-    param(
-        [Parameter(Mandatory = $true)][string]$EnglishPath,
-        [Parameter(Mandatory = $true)][string]$TranslatedPath
-    )
-
-    $english    = Get-Content -LiteralPath $EnglishPath    -Raw -Encoding UTF8 | ConvertFrom-Json
-    $translated = Get-Content -LiteralPath $TranslatedPath -Raw -Encoding UTF8 | ConvertFrom-Json
-
-    $merged = [ordered]@{}
-    $translatedCount = 0
-    $fallbackCount   = 0
-
-    foreach ($prop in $english.PSObject.Properties) {
-        $key = $prop.Name
-        $enVal = $prop.Value
-        if ($translated.PSObject.Properties[$key]) {
-            $zhVal = $translated.PSObject.Properties[$key].Value
-            $merged[$key] = $zhVal
-            if ($zhVal -ne $enVal) { $translatedCount++ }
-        }
-        else {
-            $merged[$key] = $enVal
-            $fallbackCount++
-        }
-    }
-
-    Write-Host ("    已翻译 {0} 条，英文兜底 {1} 条" -f $translatedCount, $fallbackCount)
-    return $merged
-}
-
-
 function Resolve-ClaudeResources {
     $claudePath = Find-ClaudePath
     if (-not $claudePath) {
@@ -601,41 +564,26 @@ function Install-LanguagePack {
     Write-Host "[3/5] 安装翻译文件..."
     $targets = @(
         [pscustomobject]@{
-            Name       = "ion-dist"
-            Source     = $required[0].Path
-            EnglishSrc = (Join-Path $resolved.ResourcesPath "ion-dist\i18n\en-US.json")
-            Target     = (Join-Path $resolved.ResourcesPath "ion-dist\i18n\zh-CN.json")
+            Name   = "ion-dist"
+            Source = $required[0].Path
+            Target = (Join-Path $resolved.ResourcesPath "ion-dist\i18n\zh-CN.json")
         },
         [pscustomobject]@{
-            Name       = "desktop-shell"
-            Source     = $required[1].Path
-            EnglishSrc = (Join-Path $resolved.ResourcesPath "en-US.json")
-            Target     = (Join-Path $resolved.ResourcesPath "zh-CN.json")
+            Name   = "desktop-shell"
+            Source = $required[1].Path
+            Target = (Join-Path $resolved.ResourcesPath "zh-CN.json")
         },
         [pscustomobject]@{
-            Name       = "statsig"
-            Source     = $required[2].Path
-            EnglishSrc = (Join-Path $resolved.ResourcesPath "ion-dist\i18n\statsig\en-US.json")
-            Target     = (Join-Path $resolved.ResourcesPath "ion-dist\i18n\statsig\zh-CN.json")
+            Name   = "statsig"
+            Source = $required[2].Path
+            Target = (Join-Path $resolved.ResourcesPath "ion-dist\i18n\statsig\zh-CN.json")
         }
     )
 
     foreach ($target in $targets) {
         [System.IO.Directory]::CreateDirectory((Split-Path -Parent $target.Target)) | Out-Null
         $relativeTarget = $target.Target.Substring($resolved.ResourcesPath.Length).TrimStart("\")
-
-        # 若能找到对应的 en-US.json，则合并兜底；否则直接复制
-        if (Test-Path -LiteralPath $target.EnglishSrc -PathType Leaf) {
-            Write-Host "  $($target.Name): 合并 en-US 兜底..."
-            $merged = Merge-LocaleJson -EnglishPath $target.EnglishSrc -TranslatedPath $target.Source
-            $json = $merged | ConvertTo-Json -Depth 100 -Compress:$false
-            Write-Utf8File -Path $target.Target -Content $json
-        }
-        else {
-            Copy-Item -LiteralPath $target.Source -Destination $target.Target -Force
-            Write-Host "  $($target.Name): 直接复制（未找到 en-US.json）"
-        }
-
+        Copy-Item -LiteralPath $target.Source -Destination $target.Target -Force
         Write-Host "  → $relativeTarget"
     }
 
