@@ -1,5 +1,5 @@
 # Claude Desktop 简体中文语言包
-## Windows 已验证：Claude Desktop 1.11187.4.0
+## Windows 已验证：Claude Desktop 6.2
 
 为 Claude Desktop（Windows / macOS）界面添加简体中文支持。
 
@@ -9,7 +9,8 @@
 
 ## 版本说明
 
-- 当前仓库已在 **Windows Claude Desktop 1.11187.4.0** 上验证。
+- 当前仓库已在 **Windows Claude Desktop 6.2** 上验证。
+- 说明文档已更新为 Claude Desktop 6.2 适配状态，便于向上游提交 PR。
 - Windows 安装脚本已兼容新版 Claude 前端：语言白名单可能不再位于 `index-*.js`，脚本会扫描 `ion-dist/assets/v1/*.js` 并自动注册 `zh-CN`。
 - Windows 配置路径已兼容新版 `Claude` / `Claude-3p` 本地配置目录。
 - Claude Desktop 更新后会覆盖资源文件；更新客户端后请重新运行安装脚本。
